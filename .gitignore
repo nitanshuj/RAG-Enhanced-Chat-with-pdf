@@ -163,3 +163,9 @@ cython_debug/
 
 
 .python-version
+
+.claude/
+.claude
+
+# Data directory
+data/
