@@ -13,13 +13,19 @@ dependencies = [
     "scikit-learn",
     "PyPDF2",
     "faiss-cpu",
+    "python-docx",           # DOCX processing
+    "pytesseract",           # OCR for receipts
+    "pillow",                # Image processing
+    "requests",              # HTTP client for AI/ML 
+    "numpy",                 # Array operations
+    "pandas",                # Data manipulation
     "sentence-transformers",
     # Optional dependencies (commented out)
     # "faiss-gpu",
     # "google-generativeai",
     # "langchain-openai",
     # "langchain_pinecone",
-    # "chromadb",
+    "chromadb",
     # "docarray",
     # "pydantic==1.10.8",
     # "pytube",
