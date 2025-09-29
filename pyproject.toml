@@ -1,0 +1,31 @@
+[project]
+name = "rag-enhanced-chat-with-pdf"
+version = "0.1.0"
+description = "Multi-Category Document Understanding Q&A Chatbot with Agentic RAG"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit",
+    "langchain_google_genai",
+    "langchain-community",
+    "langchain",
+    "python-dotenv",
+    "scikit-learn",
+    "PyPDF2",
+    "faiss-cpu",
+    "sentence-transformers",
+    # Optional dependencies (commented out)
+    # "faiss-gpu",
+    # "google-generativeai",
+    # "langchain-openai",
+    # "langchain_pinecone",
+    # "chromadb",
+    # "docarray",
+    # "pydantic==1.10.8",
+    # "pytube",
+    # "tiktoken",
+    # "pinecone-client",
+    # "ruff",
+    # "pypdf",
+    # "git+https://github.com/openai/whispher.git",
+]
