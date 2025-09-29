@@ -1,36 +1,35 @@
 # Enhanced RAG-Enhanced Chat with PDF Support
 
+**Note: This application only accepts PDF documents. Other file formats are not supported.**
+
 -------------------------
 
-### File Structure
+### Simplified File Structure
 
 ```
 RAG-Enhanced-Chat-with-pdf/
 │
-├── main.py                     # Main application entry point
-├── pyproject.toml              # Project configuration and dependencies
-├── requirements.txt            # Python package requirements
+├── main.py                     # Streamlit app entry point
+├── requirements.txt            # Python dependencies
 ├── README.md                   # Project documentation
+├── .env.example               # Environment configuration template
 ├── .gitignore                  # Git ignore rules
-├── .python-version             # Python version specification
 │
 ├── src/                        # Source code directory
 │   ├── __init__.py            # Package initialization
-│   ├── main.py                # Core application logic
-│   ├── agent.py               # Agentic RAG implementation
-│   ├── document_processor.py   # Document processing and parsing
-│   ├── llm_configuration.py   # LLM configuration and settings
-│   ├── memory.py              # Chat memory and session management
-│   ├── ollama_client.py       # Ollama client integration
-│   ├── utils.py               # Utility functions
-│   └── vector_store.py        # Vector store operations
+│   ├── agent.py               # Agentic RAG core logic
+│   ├── document_processor.py   # Multi-category document processing
+│   ├── llm_client.py          # AI/ML API client (replaces ollama_client)
+│   ├── vector_store.py        # Chroma DB Cloud operations
+│   └── utils.py               # Utility functions and helpers
 │
 ├── documentation/              # Project documentation
-│   ├── agentic_rag_idea.md    # Agentic RAG architecture overview
-│   └── special_features.md    # Advanced features and improvements
+│   ├── agentic_rag_idea.md    # Multi-category RAG architecture
+│   ├── vector_search_and_storage.md # Vector store configuration
+│   └── special_features.md    # Advanced features (future)
 │
-├── archived/                   # Archived files (currently empty)
-│
-├── .venv/                     # Virtual environment (if present)
-└── .git/                      # Git repository data
+└── data/                      # Document storage and cache
+    ├── uploads/               # Uploaded PDF documents
+    ├── processed/             # Processed document chunks
+    └── chroma_config/         # Chroma DB Cloud connection configuration
 ```
