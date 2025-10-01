@@ -6,32 +6,13 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "streamlit",
-    "langchain_google_genai",
-    "langchain-community",
     "langchain",
+    "langchain-openai",
+    "langchain-community",
+    "langchain-chroma",
     "python-dotenv",
-    "scikit-learn",
     "PyPDF2",
-    "faiss-cpu",
-    "python-docx",           # DOCX processing
-    "pytesseract",           # OCR for receipts
-    "pillow",                # Image processing
-    "requests",              # HTTP client for AI/ML 
-    "numpy",                 # Array operations
-    "pandas",                # Data manipulation
-    "sentence-transformers",
-    # Optional dependencies (commented out)
-    # "faiss-gpu",
-    # "google-generativeai",
-    # "langchain-openai",
-    # "langchain_pinecone",
     "chromadb",
-    # "docarray",
-    # "pydantic==1.10.8",
-    # "pytube",
-    # "tiktoken",
-    # "pinecone-client",
-    # "ruff",
-    # "pypdf",
-    # "git+https://github.com/openai/whispher.git",
+    "requests",
+    "numpy",
 ]

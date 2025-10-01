@@ -169,3 +169,9 @@ cython_debug/
 
 # Data directory
 data/
+
+
+documentation/Article_for_Medium/
+documentation/Future_Implementation/
+documentation/Coding_Workflow/
+
