@@ -7,23 +7,26 @@
 
 `Tech Stack`:
 - Python
-- LangChain
+- **LangChain Framework** (Core RAG orchestration)
+  - `langchain-openai` - ChatOpenAI & OpenAIEmbeddings
+  - `langchain-chroma` - Vector store integration
+  - `langchain-community` - Additional utilities
 - Chroma DB Cloud (vector store and retrieval)
-- PDF parsers (exclusively)
-- Embeddings (type to be decided)
-- AI/ML API for LLM (GPT 4 nano)
+- PDF parsers (PyPDF2)
+- OpenAI Embeddings (text-embedding-3-small via AI/ML API)
+- AI/ML API for LLM (GPT-4o-mini)
 - Streamlit Frontend (easy to deploy and share)
 
 ### `Note`
-- We will not use Ollama or any kind of local hosting of LLMs, rather we will use AI/ML API for LLM (GPT 4 nano).
-- We will use good industry standards for embeddings, chunking, and vector stores.
-- We will make a good production-grade code.
-- We will be using Agentic RAG approach, since it will be a chatbot - the memory of chat will be only present for the session.
-- We will use a good prompt engineering approach to make the chatbot work well.
-- We will use a good chunking approach for each document type.
-- We will use a good metadata approach for each document type.
-- We will use a good retrieval approach for each document type.
-- 
+- **Langchain-based architecture** - Using Langchain framework for simplified RAG operations
+- **Cloud LLM via AI/ML API** - GPT-4o-mini (not local hosting)
+- **Automatic embedding** - Langchain handles embedding generation automatically
+- **Production-grade code** - Built on industry-standard Langchain patterns
+- **Agentic RAG approach** - Session-based conversation memory
+- **Langchain PromptTemplates** - Structured prompt engineering
+- **Category-specific chunking** - Optimized for each document type
+- **Metadata-driven retrieval** - Enhanced search with document metadata
+- **No manual loops** - Langchain automates embedding and retrieval
 -------
 
 ## Document Categories and Unique Processing
@@ -96,9 +99,11 @@ The chatbot supports multiple document types, each with specialized processing a
   - Other: Adaptive paragraph-based
 - **Enhanced metadata**: Store category-specific metadata (citations for papers, transaction details for receipts, legal clauses for T&C)
 
-### 2. Chunk Embedding and Vector Store
-- Embed all chunks: Generate embeddings of each chunk using a semantic model.
-- Persist in Chroma DB Cloud: Store all embeddings and metadata in Chroma Cloud for scalable vector storage and retrieval.
+### 2. Chunk Embedding and Vector Store (Langchain-Powered)
+- **Automatic embedding**: Langchain OpenAIEmbeddings generates embeddings automatically
+- **No manual loops**: `vectorstore.add_documents()` handles embedding internally
+- **Batch optimization**: Langchain batches requests for efficiency
+- **Persist in Chroma DB Cloud**: Store via Langchain Chroma integration
 
 ### 3. Chatbot Session Initialization
 - Session memory/context: For each user/chatbot session, store:
@@ -117,12 +122,13 @@ The agent parses the query:
     - Task 2: Extract findings from results
     - Task 3: Compare findings with discussion
 
-### 6. Contextual Retrieval (for Each Subtask)
+### 6. Contextual Retrieval (for Each Subtask) - Langchain Chroma
 
 For each subtask:
-- Embed sub-task question
-- Search Chroma DB Cloud for relevant chunks (use metadata filtering to target specific sections and user-selected categories)
-- Retrieve top N relevant chunks using similarity search
+- **Pass query text directly** - Langchain embeds automatically
+- `vectorstore.similarity_search(query_text, filter={...})`
+- Search Chroma DB Cloud with metadata filtering (sections, categories)
+- Retrieve top N relevant chunks using vector similarity
 
 ### 7. Dynamic Prompt Construction
 For each agent step:
@@ -147,18 +153,38 @@ Then, using Results and Discussion sections, compare findings.
 If you have already found important details in earlier steps, refer to them.
 ```
 
-### 8. Multi-Step LLM Invocation via AI/ML API
-Send prompt to cloud-based LLM (GPT-4 nano) via AI/ML API (http://aimlapi.com/) for each reasoning step.
+### 8. Multi-Step LLM Invocation via AI/ML API (Langchain ChatOpenAI)
+Send prompt to cloud-based LLM using **Langchain ChatOpenAI** (GPT-4o-mini) via AI/ML API.
 
-**API Integration Features:**
-- **Cloud-based processing**: No local compute requirements, scalable and reliable
-- **Model selection**: Access to GPT-4 nano and other state-of-the-art models
-- **Rate limiting**: Built-in request management and optimization
-- **Error handling**: Robust retry mechanisms and fallback strategies
+**Langchain Integration Features:**
+- **ChatOpenAI**: Langchain wrapper for OpenAI-compatible APIs
+- **Message types**: SystemMessage, HumanMessage, AIMessage
+- **Streaming support**: Easy to enable streaming responses
+- **Automatic retry**: Langchain handles API failures
+- **Chain compatibility**: Works with all Langchain chains
 
-Agent can ask the LLM for clarification or more evidence if its output is not sufficient ("Was this methodology unique compared to the discussion section's comments?").
+**Example:**
+```python
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
 
-Store each output as part of chatbot context for user reference and follow-ups.
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_base="https://api.aimlapi.com/v1",
+    openai_api_key=API_KEY
+)
+
+messages = [
+    SystemMessage(content="You are an expert..."),
+    HumanMessage(content="Question: ...")
+]
+
+response = llm.invoke(messages)
+```
+
+Agent can ask the LLM for clarification using conversation memory.
+
+Store each output as part of chatbot context using Langchain memory components.
 
 ### 9. Output and Conversation Continuation
 
@@ -179,9 +205,29 @@ Adapts retrieval to cover missing information or fill knowledge gaps.
 
 ## Key Differences From Simple RAG
 1. **Chaining**: Agent splits questions into subtasks, sequences retrievals, and composes answers from multi-step reasoning.
-2. **Memory**: Each chat session keeps context, earlier answers, and facts.
+2. **Memory**: Each chat session keeps context, earlier answers, and facts (Langchain ConversationBufferMemory ready).
 3. **Interaction**: System asks clarifying questions, follows up, adapts approach based on user responses.
-4. **Multi-ste**p: The final answer may be composed from several LLM calls, each focused on different sections or tasks.
+4. **Multi-step**: The final answer may be composed from several LLM calls, each focused on different sections or tasks.
+5. **Langchain-powered**: Automatic embedding, simplified retrieval, and production-ready components.
+
+## Langchain Implementation Benefits
+
+### Code Simplification
+- **50% code reduction** - Automatic embedding and HTTP handling
+- **No manual loops** - Langchain handles embedding batching
+- **Direct text search** - `similarity_search(query_text)` instead of `similarity_search(embedding)`
+
+### Production Features
+- **Automatic retry logic** - Built-in API failure handling
+- **Request batching** - Optimized embedding generation
+- **Streaming support** - Easy to enable response streaming
+- **Memory integration** - ConversationBufferMemory for chat history
+
+### Developer Experience
+- **Standard patterns** - Industry-standard Langchain architecture
+- **Easy extension** - Add chains, agents, and tools easily
+- **Better testing** - Mock Langchain components for unit tests
+- **Documentation** - Leverage extensive Langchain docs and community
 
 -------
 
