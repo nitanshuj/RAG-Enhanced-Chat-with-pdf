@@ -38,8 +38,6 @@ This application allows users to upload PDF documents and ask questions about th
 
 ✅ **Cloud-Based Storage**: ChromaDB Cloud integration with automatic cleanup
 
-✅ **Modern UI**: Dark mode support, gradient styling, confirmation dialogs
-
 ✅ **Production Ready**: Custom logging, exception handling, and error tracking
 
 ---
@@ -130,8 +128,6 @@ RAG-Enhanced-Chat-with-pdf/
 │   ├── utils.py                     # Utility functions
 │   ├── vector_store.py              # Langchain Chroma integration
 │   └── logs/                        # Application logs (auto-created)
-│       ├── app_YYYYMMDD.log         # Daily application logs
-│       └── error_YYYYMMDD.log       # Error-specific logs
 │
 ├── documentation/                   # Project documentation
 │   ├── Main_documentation/          # Core documentation
@@ -144,11 +140,6 @@ RAG-Enhanced-Chat-with-pdf/
 │   └── Future_Implementation/       # Future feature plans
 │
 ├── tests/                           # Test suite
-│   ├── __init__.py                  # Test package initialization
-│   ├── run_tests.py                 # Test runner
-│   ├── test_deletion.py             # Document deletion tests
-│   ├── test_rag_agent.py            # RAG agent tests
-│   └── test_vector_store.py         # Vector store tests
 │
 └── data/                            # Data storage (auto-created)
     ├── uploads/                     # Uploaded PDF files
