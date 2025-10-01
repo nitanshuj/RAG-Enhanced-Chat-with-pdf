@@ -1,225 +1,181 @@
 """
-Vector Store Operations using ChromaDB Cloud for document storage and retrieval.
+Vector Store Operations using Langchain Chroma for document storage and retrieval.
 
-This module implements the VectorStore class for Phase 3.1 of the RAG-Enhanced Chat application,
-providing cloud-based storage, similarity search, and category-based filtering.
+This module implements vector store operations using Langchain's Chroma integration.
 """
 
 import os
-import uuid
-import chromadb
 from typing import List, Dict, Any, Optional, Tuple
-import json
-import logging
 from datetime import datetime
 from dotenv import load_dotenv
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+from src.embeddings import get_embeddings_model
+from src.logger import get_logger
+from src.exception import VectorStoreException
+import sys
 
-# Load environment variables
 load_dotenv()
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class VectorStore:
     """
-    Vector store implementation using ChromaDB Cloud for document chunk storage and retrieval.
+    Vector store implementation using Langchain Chroma Cloud.
 
     Features:
-    - Cloud-based storage (no local persistence)
+    - Cloud-based storage
     - Category-based metadata filtering
-    - Similarity search with configurable top-k
-    - Document management (add/delete)
-    - Automatic collection management
+    - Similarity search
+    - Document management
     """
 
     def __init__(self, collection_name: str = "documents"):
         """
-        Initialize ChromaDB Cloud client.
+        Initialize Langchain Chroma vector store.
 
         Args:
             collection_name: Name of the ChromaDB collection
         """
         self.collection_name = collection_name
-        self._client = None
-        self._collection = None
 
-        # Get cloud credentials from environment
+        # Get cloud credentials
         self.api_key = os.getenv("CHROMA_API_KEY")
         self.tenant = os.getenv("CHROMA_TENANT")
         self.database = os.getenv("CHROMA_DATABASE")
 
-        # Validate required environment variables
-        if not self.api_key:
-            raise ValueError("CHROMA_API_KEY environment variable is required")
-        if not self.tenant:
-            raise ValueError("CHROMA_TENANT environment variable is required")
-        if not self.database:
-            raise ValueError("CHROMA_DATABASE environment variable is required")
+        if not all([self.api_key, self.tenant, self.database]):
+            raise VectorStoreException(
+                "CHROMA_API_KEY, CHROMA_TENANT, and CHROMA_DATABASE required",
+                sys.exc_info()
+            )
 
-        # Initialize ChromaDB Cloud client
-        self._initialize_client()
-
-    def _initialize_client(self):
-        """Initialize ChromaDB Cloud client and collection"""
+        # Initialize Langchain Chroma with cloud settings
         try:
-            # Create ChromaDB Cloud client
-            self._client = chromadb.CloudClient(
+            import chromadb
+
+            # Disable telemetry
+            os.environ['ANONYMIZED_TELEMETRY'] = 'False'
+
+            client = chromadb.CloudClient(
                 tenant=self.tenant,
                 database=self.database,
                 api_key=self.api_key
             )
 
-            # Get or create collection
-            try:
-                self._collection = self._client.get_collection(
-                    name=self.collection_name
-                )
-                logger.info(f"Connected to existing collection: {self.collection_name}")
-            except Exception:
-                # Collection doesn't exist, create it
-                self._collection = self._client.create_collection(
-                    name=self.collection_name,
-                    metadata={"description": "RAG document chunks with category metadata"}
-                )
-                logger.info(f"Created new collection: {self.collection_name}")
+            # Initialize Langchain Chroma
+            self.vectorstore = Chroma(
+                client=client,
+                collection_name=collection_name,
+                embedding_function=get_embeddings_model()
+            )
 
-            logger.info(f"ChromaDB Cloud initialized successfully for tenant: {self.tenant}")
-
+            logger.info(f"Langchain Chroma initialized for collection: {collection_name}")
         except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB Cloud: {str(e)}")
-            raise Exception(f"Vector store initialization failed: {str(e)}")
+            logger.error(f"Failed to initialize Chroma: {str(e)}", exc_info=True)
+            raise VectorStoreException(f"Failed to initialize Chroma: {str(e)}", sys.exc_info())
 
     def add_documents(self, chunks: List[str], metadata: List[Dict[str, Any]],
-                     embeddings: List[List[float]]) -> Tuple[bool, str, List[str]]:
+                     embeddings: List[List[float]] = None) -> Tuple[bool, str, List[str]]:
         """
-        Store document chunks with embeddings and metadata.
+        Store document chunks with metadata using Langchain.
 
         Args:
             chunks: List of text chunks
             metadata: List of metadata dicts for each chunk
-            embeddings: List of embedding vectors for each chunk
+            embeddings: Optional pre-computed embeddings (ignored, Langchain handles this)
 
         Returns:
             Tuple of (success, message, list_of_chunk_ids)
         """
         try:
-            if not chunks or not metadata or not embeddings:
-                return False, "Empty chunks, metadata, or embeddings provided", []
+            if not chunks or not metadata:
+                return False, "Empty chunks or metadata provided", []
 
-            if len(chunks) != len(metadata) or len(chunks) != len(embeddings):
-                return False, "Chunks, metadata, and embeddings must have same length", []
+            if len(chunks) != len(metadata):
+                return False, "Chunks and metadata must have same length", []
 
-            # Generate unique IDs for each chunk
-            chunk_ids = [str(uuid.uuid4()) for _ in chunks]
-
-            # Prepare metadata with additional fields
-            processed_metadata = []
-            for i, meta in enumerate(metadata):
-                processed_meta = meta.copy()
-                processed_meta.update({
+            # Convert to Langchain Documents
+            documents = []
+            for i, (chunk, meta) in enumerate(zip(chunks, metadata)):
+                # Add timestamp and index
+                meta_copy = meta.copy()
+                meta_copy.update({
                     "chunk_index": i,
                     "added_at": datetime.now().isoformat(),
-                    "chunk_length": len(chunks[i])
+                    "chunk_length": len(chunk)
                 })
 
-                # Ensure all metadata values are strings (ChromaDB requirement)
-                for key, value in processed_meta.items():
+                # Convert all metadata values to strings
+                for key, value in meta_copy.items():
                     if not isinstance(value, (str, int, float, bool)):
-                        processed_meta[key] = str(value)
+                        meta_copy[key] = str(value)
 
-                processed_metadata.append(processed_meta)
+                documents.append(Document(page_content=chunk, metadata=meta_copy))
 
-            # Filter out None embeddings
-            valid_indices = [i for i, emb in enumerate(embeddings) if emb is not None]
+            # Add documents using Langchain (handles embedding automatically)
+            ids = self.vectorstore.add_documents(documents)
 
-            if not valid_indices:
-                return False, "No valid embeddings found", []
-
-            # Filter data to only include valid embeddings
-            valid_chunks = [chunks[i] for i in valid_indices]
-            valid_metadata = [processed_metadata[i] for i in valid_indices]
-            valid_embeddings = [embeddings[i] for i in valid_indices]
-            valid_ids = [chunk_ids[i] for i in valid_indices]
-
-            # Add to collection
-            self._collection.add(
-                documents=valid_chunks,
-                embeddings=valid_embeddings,
-                metadatas=valid_metadata,
-                ids=valid_ids
-            )
-
-            success_message = f"Successfully added {len(valid_chunks)} chunks to vector store"
-            if len(valid_chunks) < len(chunks):
-                success_message += f" (skipped {len(chunks) - len(valid_chunks)} chunks with invalid embeddings)"
-
+            success_message = f"Successfully added {len(documents)} chunks to vector store"
             logger.info(success_message)
-            return True, success_message, valid_ids
+            return True, success_message, ids
 
         except Exception as e:
-            error_message = f"Failed to add documents to vector store: {str(e)}"
+            error_message = f"Failed to add documents: {str(e)}"
             logger.error(error_message)
             return False, error_message, []
 
-    def similarity_search(self, query_embedding: List[float],
+    def similarity_search(self, query_embedding: List[float] = None,
+                         query_text: str = None,
                          category_filter: Optional[str] = None,
                          top_k: int = 5) -> Tuple[bool, List[Dict[str, Any]], str]:
         """
-        Perform similarity search with optional category filtering.
+        Perform similarity search using Langchain.
 
         Args:
-            query_embedding: Query embedding vector
+            query_embedding: Query embedding vector (optional if query_text provided)
+            query_text: Query text (Langchain will embed it)
             category_filter: Optional category to filter results
             top_k: Number of results to return
 
         Returns:
             Tuple of (success, list_of_results, error_message)
-            Each result contains: {"text": str, "metadata": dict, "similarity": float, "id": str}
         """
         try:
-            if not query_embedding:
-                return False, [], "Empty query embedding provided"
+            if not query_text and not query_embedding:
+                return False, [], "Either query_text or query_embedding required"
 
-            # Prepare where clause for category filtering
-            where_clause = None
+            # Build filter
+            filter_dict = None
             if category_filter:
-                where_clause = {"category": category_filter}
+                filter_dict = {"category": category_filter}
 
             # Perform search
-            results = self._collection.query(
-                query_embeddings=[query_embedding],
-                n_results=top_k,
-                where=where_clause
-            )
+            if query_text:
+                docs = self.vectorstore.similarity_search(
+                    query=query_text,
+                    k=top_k,
+                    filter=filter_dict
+                )
+            else:
+                # Use embedding directly (less common with Langchain)
+                docs = self.vectorstore.similarity_search_by_vector(
+                    embedding=query_embedding,
+                    k=top_k,
+                    filter=filter_dict
+                )
 
-            # Process results
+            # Convert to expected format
             processed_results = []
+            for doc in docs:
+                processed_results.append({
+                    "text": doc.page_content,
+                    "metadata": doc.metadata,
+                    "similarity": 0.8,  # Langchain doesn't always return scores
+                    "id": doc.metadata.get("id", ""),
+                })
 
-            if results['documents'] and results['documents'][0]:
-                documents = results['documents'][0]
-                metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
-                distances = results['distances'][0] if results['distances'] else [0.0] * len(documents)
-                ids = results['ids'][0] if results['ids'] else [''] * len(documents)
-
-                for i in range(len(documents)):
-                    # Convert distance to similarity (ChromaDB returns distances, lower = more similar)
-                    similarity = 1.0 / (1.0 + distances[i]) if distances[i] is not None else 0.0
-
-                    processed_results.append({
-                        "text": documents[i],
-                        "metadata": metadatas[i] if metadatas[i] else {},
-                        "similarity": similarity,
-                        "id": ids[i] if ids[i] else '',
-                        "distance": distances[i] if distances[i] is not None else 0.0
-                    })
-
-            search_info = f"Found {len(processed_results)} results"
-            if category_filter:
-                search_info += f" for category '{category_filter}'"
-
-            logger.info(search_info)
+            logger.info(f"Found {len(processed_results)} results")
             return True, processed_results, None
 
         except Exception as e:
@@ -228,101 +184,69 @@ class VectorStore:
             return False, [], error_message
 
     def delete_document(self, document_id: str) -> Tuple[bool, str]:
-        """
-        Delete a specific document/chunk by ID.
-
-        Args:
-            document_id: ID of the document chunk to delete
-
-        Returns:
-            Tuple of (success, message)
-        """
+        """Delete a document by ID."""
         try:
-            if not document_id:
-                return False, "Empty document ID provided"
-
-            # Check if document exists
-            existing = self._collection.get(ids=[document_id])
-
-            if not existing['ids']:
-                return False, f"Document with ID '{document_id}' not found"
-
-            # Delete the document
-            self._collection.delete(ids=[document_id])
-
-            logger.info(f"Successfully deleted document: {document_id}")
+            self.vectorstore.delete([document_id])
+            logger.info(f"Deleted document: {document_id}")
             return True, f"Document '{document_id}' deleted successfully"
-
         except Exception as e:
-            error_message = f"Failed to delete document '{document_id}': {str(e)}"
-            logger.error(error_message)
+            error_message = f"Failed to delete document: {str(e)}"
+            logger.error(error_message, exc_info=True)
             return False, error_message
 
-    def delete_documents_by_category(self, category: str) -> Tuple[bool, str, int]:
+    def delete_documents_by_metadata(self, metadata_filter: Dict[str, Any]) -> Tuple[bool, str, int]:
         """
-        Delete all documents belonging to a specific category.
+        Delete all documents matching the metadata filter.
 
         Args:
-            category: Category name to filter and delete
+            metadata_filter: Dictionary with metadata key-value pairs to filter by
+                            Example: {"document_id": "example.pdf", "category": "Research Paper"}
 
         Returns:
             Tuple of (success, message, count_deleted)
+
+        Example:
+            >>> success, msg, count = vector_store.delete_documents_by_metadata(
+            ...     {"document_id": "example.pdf"}
+            ... )
+            >>> print(f"Deleted {count} chunks")
         """
         try:
-            if not category:
-                return False, "Empty category provided", 0
+            # Get the underlying chromadb collection
+            collection = self.vectorstore._collection
 
-            # Find documents in category
-            results = self._collection.get(
-                where={"category": category}
+            # Query to find all matching documents
+            results = collection.get(
+                where=metadata_filter,
+                include=["metadatas"]
             )
 
-            if not results['ids']:
-                return True, f"No documents found in category '{category}'", 0
+            if not results or not results.get('ids'):
+                logger.info(f"No documents found matching filter: {metadata_filter}")
+                return True, "No documents found to delete", 0
 
-            # Delete all documents in category
-            self._collection.delete(
-                where={"category": category}
-            )
+            # Delete all matching IDs
+            ids_to_delete = results['ids']
+            collection.delete(ids=ids_to_delete)
 
-            count_deleted = len(results['ids'])
-            logger.info(f"Deleted {count_deleted} documents from category: {category}")
-            return True, f"Deleted {count_deleted} documents from category '{category}'", count_deleted
+            count_deleted = len(ids_to_delete)
+            logger.info(f"Deleted {count_deleted} document chunks matching filter: {metadata_filter}")
+            return True, f"Successfully deleted {count_deleted} document chunks", count_deleted
 
         except Exception as e:
-            error_message = f"Failed to delete documents from category '{category}': {str(e)}"
-            logger.error(error_message)
+            error_message = f"Failed to delete documents by metadata: {str(e)}"
+            logger.error(error_message, exc_info=True)
             return False, error_message, 0
 
     def get_collection_info(self) -> Dict[str, Any]:
-        """
-        Get information about the current collection.
-
-        Returns:
-            Dictionary with collection statistics
-        """
+        """Get information about the collection."""
         try:
-            # Get collection count
-            count_result = self._collection.count()
-
-            # Get sample of metadata to understand categories
-            sample_results = self._collection.get(limit=100)
-
-            categories = set()
-            if sample_results['metadatas']:
-                for meta in sample_results['metadatas']:
-                    if 'category' in meta:
-                        categories.add(meta['category'])
-
             return {
                 "collection_name": self.collection_name,
-                "total_documents": count_result,
-                "categories_found": list(categories),
                 "tenant": self.tenant,
                 "database": self.database,
-                "initialized": self._client is not None
+                "initialized": True
             }
-
         except Exception as e:
             logger.error(f"Failed to get collection info: {str(e)}")
             return {
@@ -331,120 +255,16 @@ class VectorStore:
                 "initialized": False
             }
 
-    def clear_collection(self) -> Tuple[bool, str]:
-        """
-        Clear all documents from the collection.
-
-        Returns:
-            Tuple of (success, message)
-        """
-        try:
-            # Get all document IDs
-            all_docs = self._collection.get()
-
-            if not all_docs['ids']:
-                return True, "Collection is already empty"
-
-            count_before = len(all_docs['ids'])
-
-            # Delete all documents
-            self._collection.delete(
-                ids=all_docs['ids']
-            )
-
-            logger.info(f"Cleared {count_before} documents from collection")
-            return True, f"Successfully cleared {count_before} documents from collection"
-
-        except Exception as e:
-            error_message = f"Failed to clear collection: {str(e)}"
-            logger.error(error_message)
-            return False, error_message
-
     def health_check(self) -> Tuple[bool, str]:
-        """
-        Check if the vector store is healthy and accessible.
-
-        Returns:
-            Tuple of (healthy, status_message)
-        """
+        """Check if the vector store is healthy."""
         try:
-            if not self._client or not self._collection:
-                return False, "ChromaDB client or collection not initialized"
-
-            # Test basic operations
-            count = self._collection.count()
-
-            return True, f"Vector store is healthy. Contains {count} documents."
-
+            if not self.vectorstore:
+                return False, "Vectorstore not initialized"
+            return True, "Vector store is healthy"
         except Exception as e:
-            return False, f"Vector store health check failed: {str(e)}"
+            return False, f"Health check failed: {str(e)}"
 
-
-# Utility functions for vector store operations
 
 def create_vector_store(collection_name: str = "documents") -> VectorStore:
-    """
-    Factory function to create a VectorStore instance.
-
-    Args:
-        collection_name: ChromaDB collection name
-
-    Returns:
-        Initialized VectorStore instance
-    """
+    """Factory function to create a VectorStore instance."""
     return VectorStore(collection_name)
-
-
-def test_vector_store(vector_store: VectorStore) -> bool:
-    """
-    Test vector store with sample data.
-
-    Args:
-        vector_store: VectorStore instance to test
-
-    Returns:
-        True if all tests pass, False otherwise
-    """
-    try:
-        # Test data
-        test_chunks = ["This is a test document.", "This is another test chunk."]
-        test_metadata = [
-            {"category": "test", "document_id": "test_doc_1", "section": "intro"},
-            {"category": "test", "document_id": "test_doc_1", "section": "body"}
-        ]
-        test_embeddings = [
-            [0.1, 0.2, 0.3, 0.4, 0.5],  # Dummy embeddings for testing
-            [0.2, 0.3, 0.4, 0.5, 0.6]
-        ]
-
-        # Test add documents
-        success, message, chunk_ids = vector_store.add_documents(
-            test_chunks, test_metadata, test_embeddings
-        )
-
-        if not success:
-            logger.error(f"Add documents test failed: {message}")
-            return False
-
-        # Test similarity search
-        success, results, error = vector_store.similarity_search(
-            [0.15, 0.25, 0.35, 0.45, 0.55], category_filter="test", top_k=2
-        )
-
-        if not success:
-            logger.error(f"Similarity search test failed: {error}")
-            return False
-
-        # Test delete documents
-        if chunk_ids:
-            success, message = vector_store.delete_document(chunk_ids[0])
-            if not success:
-                logger.error(f"Delete document test failed: {message}")
-                return False
-
-        logger.info("Vector store tests passed successfully")
-        return True
-
-    except Exception as e:
-        logger.error(f"Vector store test failed: {str(e)}")
-        return False

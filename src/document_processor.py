@@ -3,6 +3,11 @@ from typing import List, Dict, Any, Union
 from io import BytesIO
 import re
 from datetime import datetime
+from src.logger import get_logger
+from src.exception import DocumentProcessingException
+import sys
+
+logger = get_logger(__name__)
 
 
 class DocumentProcessor:
@@ -48,16 +53,20 @@ class DocumentProcessor:
                         text_content += f"\n--- Page {page_num + 1} ---\n"
                         text_content += page_text
                 except Exception as e:
-                    print(f"Warning: Could not extract text from page {page_num + 1}: {e}")
+                    logger.warning(f"Could not extract text from page {page_num + 1}: {e}")
                     continue
 
             if not text_content.strip():
-                raise ValueError("No text could be extracted from the PDF")
+                raise DocumentProcessingException("No text could be extracted from the PDF", sys.exc_info())
 
+            logger.info(f"Successfully extracted text from {len(pdf_reader.pages)} pages")
             return text_content.strip()
 
+        except DocumentProcessingException:
+            raise
         except Exception as e:
-            raise Exception(f"Failed to extract text from PDF: {str(e)}")
+            logger.error(f"Failed to extract text from PDF: {str(e)}", exc_info=True)
+            raise DocumentProcessingException(f"Failed to extract text from PDF: {str(e)}", sys.exc_info())
 
     def simple_chunk(self, text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
         """
@@ -165,10 +174,8 @@ class DocumentProcessor:
                 sub_chunks = self._sub_chunk_large_section(section_content, section_name, max_chunk_size, overlap)
                 chunks.extend(sub_chunks)
 
-        # Add overlap between different sections
-        chunks_with_overlap = self._add_inter_section_overlap(chunks, overlap)
-
-        return chunks_with_overlap
+        # Return chunks without inter-section overlap - embeddings handle cross-section context
+        return chunks
 
     def _detect_headings(self, text: str) -> List[Dict[str, Any]]:
         """
@@ -196,40 +203,20 @@ class DocumentProcessor:
 
     def _calculate_heading_score(self, line: str, line_index: int, all_lines: List[str]) -> float:
         """
-        Calculate confidence score that a line is a heading using multiple heuristics
+        Calculate confidence score that a line is a heading using 5 core heuristics.
+        Optimized for both standard and non-standard research paper headings.
         """
         score = 0.0
-
-        # 1. Length heuristic: Headings are typically shorter
-        if 5 <= len(line) <= 100:
-            score += 0.2
-        elif len(line) > 200:
-            score -= 0.3
-
-        # 2. Capitalization patterns
         words = line.split()
+
         if not words:
             return 0.0
 
-        # All caps (strong indicator)
+        # 1. All-caps detection (HIGH VALUE: 0.4) - Works for "METHODOLOGY", "WHY AGENTS FAIL"
         if line.isupper() and len(words) <= 8:
             score += 0.4
 
-        # Title case (moderate indicator)
-        title_case_count = sum(1 for word in words if word[0].isupper() and len(word) > 1)
-        if title_case_count >= len(words) * 0.7:  # At least 70% title case
-            score += 0.3
-
-        # 3. Numbered sections
-        if re.match(r'^\d+\.?\s+', line) or re.match(r'^[A-Z]\.?\s+', line):
-            score += 0.4
-
-        # 4. Roman numerals
-        if re.match(r'^[IVX]+\.?\s+', line):
-            score += 0.3
-
-        # 5. Structural indicators
-        # Check if line is surrounded by empty lines (strong heading indicator)
+        # 2. Surrounded by empty lines (HIGH VALUE: 0.3) - Strong structural indicator
         prev_empty = (line_index == 0 or
                      (line_index > 0 and not all_lines[line_index - 1].strip()))
         next_empty = (line_index == len(all_lines) - 1 or
@@ -238,47 +225,27 @@ class DocumentProcessor:
         if prev_empty and next_empty:
             score += 0.3
         elif prev_empty or next_empty:
-            score += 0.1
+            score += 0.15
 
-        # 6. Check if followed by content (not another potential heading)
-        if line_index < len(all_lines) - 2:
-            next_line = all_lines[line_index + 1].strip()
-            next_next_line = all_lines[line_index + 2].strip()
+        # 3. Numbered sections (HIGH VALUE: 0.4) - "1. Introduction", "2.1 Methods"
+        if re.match(r'^\d+\.?\s+', line) or re.match(r'^[A-Z]\.?\s+', line):
+            score += 0.4
 
-            if next_line == "" and len(next_next_line) > 50:  # Empty line followed by content
-                score += 0.2
-
-        # 7. Common heading patterns
-        # Question headings
-        if line.endswith('?'):
+        # 4. Length heuristic (MEDIUM VALUE: 0.2) - Headings are typically 5-100 chars
+        if 5 <= len(line) <= 100:
             score += 0.2
-
-        # Colon endings (less common but possible)
-        if line.endswith(':'):
-            score += 0.1
-
-        # 8. Academic paper specific patterns
-        academic_keywords = [
-            'introduction', 'methodology', 'results', 'discussion', 'conclusion',
-            'abstract', 'background', 'related work', 'literature review',
-            'experimental', 'evaluation', 'analysis', 'implementation',
-            'future work', 'limitations', 'references', 'acknowledgments'
-        ]
-
-        line_lower = line.lower()
-        if any(keyword in line_lower for keyword in academic_keywords):
-            score += 0.3
-
-        # 9. Avoid false positives
-        # Sentences with punctuation in middle are less likely to be headings
-        if ',' in line or ';' in line:
-            score -= 0.2
-
-        # Very long lines are unlikely to be headings
-        if len(line) > 150:
+        elif len(line) > 200:
             score -= 0.3
 
-        # Lines starting with lowercase (except 'and', 'or', 'the', etc.)
+        # 5. Title case (MEDIUM VALUE: 0.2) - "Introduction to Machine Learning"
+        title_case_count = sum(1 for word in words if word[0].isupper() and len(word) > 1)
+        if title_case_count >= len(words) * 0.7:  # At least 70% title case
+            score += 0.2
+
+        # Quality control: Filter false positives
+        if ',' in line or ';' in line:  # Mid-sentence punctuation
+            score -= 0.3
+
         if line[0].islower() and not line.lower().startswith(('and ', 'or ', 'the ', 'a ', 'an ')):
             score -= 0.2
 
@@ -345,10 +312,11 @@ class DocumentProcessor:
         """
         Fallback method using content-based heuristics when no clear headings are found
         """
-        # Try to find sections based on content patterns and paragraph structure
+        # Simplified fallback: use paragraph-based chunking
+        # Vector embeddings handle semantic relationships, so no need for complex pattern matching
         paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
 
-        if len(paragraphs) <= 3:
+        if not paragraphs or len(paragraphs) <= 2:
             # Very short document, treat as single section
             return [{
                 'section': 'Full Document',
@@ -358,66 +326,18 @@ class DocumentProcessor:
                 'confidence': 0.3
             }]
 
-        # Use traditional academic patterns as last resort
+        # Chunk by paragraphs - embeddings will group semantically similar content
         sections = []
-        current_section = 'Introduction'
-        current_content = []
+        for i, para in enumerate(paragraphs):
+            sections.append({
+                'section': f'Section {i+1}',
+                'content': para,
+                'line_start': 0,  # Line tracking less important for unstructured docs
+                'line_end': 0,
+                'confidence': 0.3
+            })
 
-        section_patterns = [
-            (r'\b(?:ABSTRACT|Abstract)\b', 'Abstract'),
-            (r'\b(?:INTRODUCTION|Introduction)\b', 'Introduction'),
-            (r'\b(?:METHODOLOGY|Methods|METHODS)\b', 'Methodology'),
-            (r'\b(?:RESULTS|Results)\b', 'Results'),
-            (r'\b(?:DISCUSSION|Discussion)\b', 'Discussion'),
-            (r'\b(?:CONCLUSION|Conclusion)\b', 'Conclusion'),
-        ]
-
-        text_lines = text.split('\n')
-        for i, line in enumerate(text_lines):
-            line_stripped = line.strip()
-
-            # Check for traditional patterns
-            found_section = None
-            for pattern, section_name in section_patterns:
-                if re.search(pattern, line_stripped):
-                    found_section = section_name
-                    break
-
-            if found_section and current_content:
-                section_text = '\n'.join(current_content).strip()
-                if section_text:
-                    sections.append({
-                        'section': current_section,
-                        'content': section_text,
-                        'line_start': max(0, i - len(current_content)),
-                        'line_end': i - 1,
-                        'confidence': 0.4
-                    })
-
-                current_section = found_section
-                current_content = [line]
-            else:
-                current_content.append(line)
-
-        # Add final section
-        if current_content:
-            section_text = '\n'.join(current_content).strip()
-            if section_text:
-                sections.append({
-                    'section': current_section,
-                    'content': section_text,
-                    'line_start': len(text_lines) - len(current_content),
-                    'line_end': len(text_lines) - 1,
-                    'confidence': 0.4
-                })
-
-        return sections if sections else [{
-            'section': 'Full Document',
-            'content': text.strip(),
-            'line_start': 0,
-            'line_end': len(text.split('\n')) - 1,
-            'confidence': 0.2
-        }]
+        return sections
 
     def _sub_chunk_large_section(self, content: str, section_name: str, max_chunk_size: int, overlap: int) -> List[Dict[str, str]]:
         """
@@ -473,40 +393,6 @@ class DocumentProcessor:
             })
 
         return chunks
-
-    def _add_inter_section_overlap(self, chunks: List[Dict[str, str]], overlap: int) -> List[Dict[str, str]]:
-        """
-        Add overlap between different sections to maintain context
-        """
-        if overlap <= 0 or len(chunks) <= 1:
-            return chunks
-
-        enhanced_chunks = []
-
-        for i, chunk in enumerate(chunks):
-            content = chunk['content']
-
-            # Add overlap from previous chunk
-            if i > 0 and overlap > 0:
-                prev_content = chunks[i-1]['content']
-                if len(prev_content) >= overlap:
-                    overlap_text = prev_content[-overlap:].strip()
-                    content = f"[...{overlap_text}]\n\n{content}"
-
-            # Add overlap to next chunk preview (optional context)
-            if i < len(chunks) - 1 and overlap > 0:
-                next_content = chunks[i+1]['content']
-                if len(next_content) >= overlap:
-                    next_preview = next_content[:overlap].strip()
-                    content = f"{content}\n\n[{next_preview}...]"
-
-            enhanced_chunks.append({
-                **chunk,
-                'content': content,
-                'has_overlap': i > 0 or i < len(chunks) - 1
-            })
-
-        return enhanced_chunks
 
     def extract_metadata(self, text: str, category: str, filename: str) -> Dict[str, Any]:
         """
