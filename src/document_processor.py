@@ -7,15 +7,38 @@ from src.logger import get_logger
 from src.exception import DocumentProcessingException
 import sys
 
+# Optional import for semantic chunking
+try:
+    from langchain_experimental.text_splitter import SemanticChunker
+    from src.embeddings import get_embeddings_model
+    SEMANTIC_CHUNKING_AVAILABLE = True
+except ImportError:
+    SEMANTIC_CHUNKING_AVAILABLE = False
+
 logger = get_logger(__name__)
 
 
 class DocumentProcessor:
     """PDF-only document processor with category-specific processing"""
 
-    def __init__(self):
-        """Initialize the document processor"""
+    def __init__(self, use_semantic_chunking: bool = True):
+        """
+        Initialize the document processor
+
+        Args:
+            use_semantic_chunking: Enable semantic chunking for non-research documents
+        """
         self.supported_types = ['pdf']
+        self.use_semantic_chunking = use_semantic_chunking and SEMANTIC_CHUNKING_AVAILABLE
+        self.semantic_chunker = None
+
+        if self.use_semantic_chunking:
+            try:
+                self.semantic_chunker = SemanticChunker(get_embeddings_model())
+                logger.info("Semantic chunker initialized for non-research documents")
+            except Exception as e:
+                logger.warning(f"Failed to initialize semantic chunker: {e}")
+                self.use_semantic_chunking = False
 
     def extract_text(self, file_buffer: Union[BytesIO, bytes]) -> str:
         """
@@ -67,6 +90,29 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Failed to extract text from PDF: {str(e)}", exc_info=True)
             raise DocumentProcessingException(f"Failed to extract text from PDF: {str(e)}", sys.exc_info())
+
+    def semantic_chunk(self, text: str) -> List[str]:
+        """
+        Semantic chunking using embeddings for better boundary detection.
+        Used for non-research documents when enabled.
+
+        Args:
+            text: Text to chunk
+
+        Returns:
+            List of semantically coherent text chunks
+        """
+        if not self.use_semantic_chunking or not self.semantic_chunker:
+            # Fallback to simple chunking
+            return self.simple_chunk(text)
+
+        try:
+            chunks = self.semantic_chunker.split_text(text)
+            logger.info(f"Semantic chunking produced {len(chunks)} chunks")
+            return chunks
+        except Exception as e:
+            logger.warning(f"Semantic chunking failed, falling back to simple chunking: {e}")
+            return self.simple_chunk(text)
 
     def simple_chunk(self, text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
         """
@@ -566,9 +612,15 @@ class DocumentProcessor:
                 chunk_metadata = chunk_data
                 chunk_method = 'heading_based'
             else:
-                chunks = self.simple_chunk(extracted_text, chunk_size=500, overlap=50)
-                chunk_metadata = [{"content": chunk, "section": "content", "chunk_type": "simple"} for chunk in chunks]
-                chunk_method = 'simple_overlap'
+                # Use semantic chunking for non-research documents if available
+                if self.use_semantic_chunking:
+                    chunks = self.semantic_chunk(extracted_text)
+                    chunk_metadata = [{"content": chunk, "section": "content", "chunk_type": "semantic"} for chunk in chunks]
+                    chunk_method = 'semantic'
+                else:
+                    chunks = self.simple_chunk(extracted_text, chunk_size=500, overlap=50)
+                    chunk_metadata = [{"content": chunk, "section": "content", "chunk_type": "simple"} for chunk in chunks]
+                    chunk_method = 'simple_overlap'
 
             if not chunks:
                 raise ValueError("No text chunks could be created")
