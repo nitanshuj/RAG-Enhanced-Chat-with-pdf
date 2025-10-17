@@ -421,22 +421,30 @@ def main():
             with st.chat_message("user", avatar="👤"):
                 st.markdown(prompt)
 
-            # Generate response using RAG agent
+            # Generate response using RAG agent with streaming
             with st.chat_message("assistant", avatar="🤖"):
-                with st.spinner("🔍 Searching documents and generating response..."):
-                    response_text, debug_info = generate_rag_response(
-                        prompt,
-                        st.session_state.selected_category
-                    )
-                    st.markdown(response_text)
+                response_placeholder = st.empty()
+                full_response = ""
 
-                    # Show debug information if enabled
-                    if st.session_state.show_debug and debug_info:
-                        with st.expander("🔧 Debug Information"):
-                            st.json(debug_info)
+                # Stream the response
+                for token in st.session_state.rag_agent.process_query_stream(
+                    query=prompt,
+                    category_filter=st.session_state.selected_category,
+                    top_k=5
+                ):
+                    full_response += token
+                    response_placeholder.markdown(full_response + "▌")
+
+                # Final response without cursor
+                response_placeholder.markdown(full_response)
+
+                # Show debug information if enabled (non-streaming for now)
+                # if st.session_state.show_debug:
+                #     with st.expander("🔧 Debug Information"):
+                #         st.write("Debug info available in non-streaming mode")
 
             # Add assistant response to history
-            st.session_state.messages.append({"role": "assistant", "content": response_text})
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
     else:
         # Welcome screen when no document is uploaded
         st.markdown("""
