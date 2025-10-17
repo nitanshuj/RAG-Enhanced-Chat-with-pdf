@@ -34,24 +34,39 @@ The system follows a **layered architecture with Langchain framework** for simpl
 │              LAYER 4: RAG ORCHESTRATION (LANGCHAIN)         │
 │                        (agent.py)                           │
 │  - SimpleRAGAgent: Complete RAG pipeline                    │
+│  - Hybrid search (BM25 + Dense vectors)                     │
+│  - Cross-encoder re-ranking                                 │
+│  - Response caching (cache.py)                              │
+│  - Semantic memory (VectorStoreRetrieverMemory)             │
+│  - Web search integration (web_search.py)                   │
+│  - Streaming responses                                      │
 │  - Langchain PromptTemplate                                 │
 │  - Query processing & validation                            │
 │  - Conversation history management                          │
 │  - Context formatting                                       │
 └──────────┬──────────────────────────────────┬───────────────┘
-           │ uses Langchain                   │ uses
+           │ uses                             │ uses
            ↓                                  ↓
-┌──────────────────────────┐    ┌────────────────────────────┐
-│   LAYER 3: DATA STORAGE  │    │  LAYER 3: DOCUMENT PROC.   │
-│   (vector_store.py)      │    │  (document_processor.py)   │
-│                          │    │                            │
-│  - Langchain Chroma      │    │  - PDF text extraction     │
-│  - Similarity search     │    │  - Category detection      │
-│  - Auto embeddings       │    │  - Intelligent chunking    │
-│  - Metadata filtering    │    │  - Metadata extraction     │
-└────────────┬─────────────┘    └──────────────┬─────────────┘
-             │ uses Langchain                  │ uses
-             ↓                                 ↓
+┌─────────────────────────────────────────────────────────────┐
+│              LAYER 3: DATA & UTILITIES                      │
+├──────────────────────────┬──────────────────────────────────┤
+│   vector_store.py        │    document_processor.py         │
+│  - Langchain Chroma      │    - PDF text extraction         │
+│  - BM25 + Dense search   │    - Category detection          │
+│  - Ensemble retriever    │    - Semantic chunking           │
+│  - Cross-encoder rerank  │    - Rule-based chunking         │
+│  - Auto embeddings       │    - Metadata extraction         │
+│  - Metadata filtering    │                                  │
+├──────────────────────────┼──────────────────────────────────┤
+│   cache.py               │    web_search.py                 │
+│  - ResponseCache         │    - WebSearcher                 │
+│  - In-memory TTL cache   │    - DuckDuckGo integration      │
+│  - Hash-based keys       │    - Result formatting           │
+│  - Cache statistics      │    - Hybrid doc+web results      │
+│  - 30-50% cost reduction │    - 85% docs + 15% web          │
+└────────────┬─────────────┴──────────────┬───────────────────┘
+             │ uses Langchain             │ uses
+             ↓                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │              LAYER 2: LANGCHAIN AI SERVICES                 │
 ├──────────────────────────┬──────────────────────────────────┤
@@ -512,14 +527,32 @@ main.py
 agent.py (Langchain)
   ├── imports: langchain.prompts.PromptTemplate
   ├── imports: llm_client.get_llm_model (ChatOpenAI)
-  ├── calls: vector_store.similarity_search() [Langchain Chroma]
+  ├── imports: cache.get_cache (ResponseCache)
+  ├── imports: web_search.get_web_searcher (WebSearcher)
+  ├── calls: vector_store.hybrid_search() [BM25 + Dense]
+  ├── calls: vector_store.rerank_results() [Cross-encoder]
+  ├── calls: web_searcher.search() [DuckDuckGo]
   └── calls: llm.invoke() [Langchain ChatOpenAI]
 
 vector_store.py (Langchain)
   ├── imports: langchain_chroma.Chroma
   ├── imports: langchain.schema.Document
+  ├── imports: langchain_community.retrievers.BM25Retriever
+  ├── imports: langchain.retrievers.EnsembleRetriever
+  ├── imports: sentence_transformers.CrossEncoder
   ├── imports: embeddings.get_embeddings_model()
   └── uses: Langchain auto-embedding on add/search
+
+cache.py
+  ├── implements: ResponseCache (in-memory TTL cache)
+  ├── methods: get(), set(), clear(), get_stats()
+  └── features: Hash-based keys, TTL expiration, cache statistics
+
+web_search.py
+  ├── imports: duckduckgo_search.DDGS
+  ├── implements: WebSearcher (web search integration)
+  ├── methods: search(), should_use_web_search(), combine_results()
+  └── features: DuckDuckGo search, result formatting, hybrid results
 
 embeddings.py (Langchain)
   ├── imports: langchain_openai.OpenAIEmbeddings
