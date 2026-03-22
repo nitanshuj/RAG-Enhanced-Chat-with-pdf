@@ -11,6 +11,9 @@ logger = get_logger(__name__)
 
 # Optional imports for web search
 try:
+    import warnings
+    # Suppress the duckduckgo_search renaming warning
+    warnings.filterwarnings("ignore", message="This package (`duckduckgo_search`) has been renamed to `ddgs`!")
     from duckduckgo_search import DDGS
     WEB_SEARCH_AVAILABLE = True
 except ImportError:

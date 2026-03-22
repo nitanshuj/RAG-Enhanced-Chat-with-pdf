@@ -26,7 +26,7 @@ def test_deletion():
     try:
         # Initialize vector store
         print("\n1. Initializing vector store...")
-        vector_store = VectorStore(collection_name="streamlit_docs")
+        vector_store = VectorStore(collection_name="test_docs")
         print("✓ Vector store initialized")
 
         # Test data

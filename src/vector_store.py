@@ -144,16 +144,34 @@ class VectorStore:
                 documents.append(Document(page_content=chunk, metadata=meta_copy))
 
             # Add documents using Langchain (handles embedding automatically)
-            ids = self.vectorstore.add_documents(documents)
+            # Use batching to avoid Chroma Cloud 16KB quota limits
+            batch_size = 5
+            all_ids = []
+            
+            # Safety check: ensure no individual chunk exceeds the limit (with some overhead)
+            MAX_SINGLE_CHUNK_SIZE = 12000 
+            for i, doc in enumerate(documents):
+                if len(doc.page_content) > MAX_SINGLE_CHUNK_SIZE:
+                    logger.warning(f"Chunk {i} is very large ({len(doc.page_content)} bytes). This may exceed Chroma quota.")
+
+            for i in range(0, len(documents), batch_size):
+                batch = documents[i:i + batch_size]
+                try:
+                    batch_ids = self.vectorstore.add_documents(batch)
+                    all_ids.extend(batch_ids)
+                except Exception as batch_error:
+                    error_msg = f"Failed to add batch starting at index {i}: {str(batch_error)}"
+                    logger.error(error_msg)
+                    return False, error_msg, all_ids
 
             # Update BM25 index if hybrid search is enabled
             if self.enable_hybrid_search:
                 self.all_documents.extend(documents)
                 self._update_bm25_retriever()
 
-            success_message = f"Successfully added {len(documents)} chunks to vector store"
+            success_message = f"Successfully added {len(documents)} chunks (in {((len(documents)-1)//batch_size)+1} batches) to vector store"
             logger.info(success_message)
-            return True, success_message, ids
+            return True, success_message, all_ids
 
         except Exception as e:
             error_message = f"Failed to add documents: {str(e)}"

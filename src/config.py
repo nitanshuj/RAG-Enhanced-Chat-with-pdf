@@ -28,9 +28,9 @@ CHROMA_DATABASE = os.getenv("CHROMA_DATABASE")
 # MODEL CONFIGURATION
 # ==============================================================================
 
-# Chat/LLM Models
-CHAT_MODEL = "gpt-4o-mini"  # Primary chat model for responses
-FALLBACK_CHAT_MODEL = "gpt-4"  # Fallback if primary fails (optional)
+# Chat/LLM Models 
+CHAT_MODEL = "openai/gpt-5-nano-2025-08-07"  # Primary chat model for responses
+FALLBACK_CHAT_MODEL = "gpt-4o"  # Fallback if primary fails (optional)
 
 # Embedding Models
 EMBEDDING_MODEL = "text-embedding-3-small"  # Primary embedding model
@@ -38,7 +38,7 @@ EMBEDDING_DIMENSION = 1536  # Dimension of embedding vectors
 
 # Model Parameters
 DEFAULT_CHAT_TEMPERATURE = 0.1  # Lower = more focused, Higher = more creative
-DEFAULT_MAX_TOKENS = 1000  # Maximum tokens in LLM response
+DEFAULT_MAX_TOKENS = 4000  # Increased for reasoning models (GPT-5)
 DEFAULT_EMBEDDING_MAX_TOKENS = 8000  # Maximum tokens for embedding input
 
 # ==============================================================================
@@ -87,14 +87,14 @@ DOCUMENT_CATEGORIES = [
 # UI CONFIGURATION
 # ==============================================================================
 
-# Streamlit Settings
-APP_TITLE = "PDF Document Q&A Chatbot"
+# Application Settings
+APP_TITLE = "Enhanced RAG App"
 APP_ICON = "🤖"
 APP_LAYOUT = "wide"
 
 # File Upload Settings
 ALLOWED_FILE_TYPES = ['pdf']
-MAX_FILE_SIZE_MB = 50  # Maximum file size in megabytes
+MAX_FILE_SIZE_MB = 20  # Maximum file size in megabytes
 
 # ==============================================================================
 # LOGGING CONFIGURATION

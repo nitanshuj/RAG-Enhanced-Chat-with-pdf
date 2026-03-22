@@ -15,7 +15,7 @@
 - PDF parsers (PyPDF2)
 - OpenAI Embeddings (text-embedding-3-small via AI/ML API)
 - AI/ML API for LLM (GPT-4o-mini)
-- Streamlit Frontend (easy to deploy and share)
+- Frontend handled separately, FastAPI for backend
 
 ### `Note`
 - **Langchain-based architecture** - Using Langchain framework for simplified RAG operations

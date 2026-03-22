@@ -45,7 +45,7 @@ class DocumentProcessor:
         Extract text from PDF file buffer
 
         Args:
-            file_buffer: PDF file buffer from Streamlit upload
+            file_buffer: PDF file buffer from upload
 
         Returns:
             Extracted text content

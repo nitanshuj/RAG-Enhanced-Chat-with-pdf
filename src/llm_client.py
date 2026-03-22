@@ -184,7 +184,7 @@ def test_llm_connection() -> Tuple[bool, str, str]:
     try:
         success, response, error = generate_response(
             prompt="test",
-            max_tokens=10,
+            max_tokens=1000,
             temperature=0.0
         )
 

@@ -53,9 +53,9 @@ This application allows users to upload PDF documents and ask questions about th
        │
        ↓
 ┌──────────────────────────────────────┐
-│  Streamlit UI (main.py)              │
-│  - File upload & category detection  │
-│  - Chat interface                    │
+│  FastAPI Backend (server.py)         │
+│  - File upload & category filtering  │
+│  - Streaming chat endpoints          │
 │  - Session management                │
 └──────┬───────────────────────────────┘
        │
@@ -107,7 +107,7 @@ For detailed component interactions, data flow, and Langchain integration, see [
 ```
 RAG-Enhanced-Chat-with-pdf/
 │
-├── main.py                          # Streamlit application entry point
+├── server.py                        # FastAPI application entry point
 ├── pyproject.toml                   # uv dependency management
 ├── uv.lock                          # Dependency lock file
 ├── README.md                        # This file
@@ -230,7 +230,7 @@ If successful, you'll see: `✅ ChromaDB connection successful!`
 ### 4. Run the Application
 
 ```bash
-uv run streamlit run main.py
+uv run uvicorn server:app --reload
 ```
 
 The application will open in your browser at `http://localhost:8501`
@@ -352,7 +352,7 @@ This project is open-source and available under the MIT License.
 - **ChromaDB**: [trychroma.com](https://www.trychroma.com/)
 - **AI/ML API**: [aimlapi.com](https://aimlapi.com/)
 - **Langchain**: [python.langchain.com](https://python.langchain.com/)
-- **Streamlit**: [streamlit.io](https://streamlit.io/)
+- **FastAPI**: [fastapi.tiangolo.com](https://fastapi.tiangolo.com/)
 
 ---
 
@@ -364,4 +364,4 @@ For issues, questions, or contributions:
 
 ---
 
-**Built with ❤️ using Langchain, ChromaDB, and Streamlit**
+**Built with ❤️ using Langchain, ChromaDB, and FastAPI**
